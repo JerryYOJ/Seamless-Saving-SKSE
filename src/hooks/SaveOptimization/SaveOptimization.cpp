@@ -141,16 +141,16 @@ RE::BSStorageDefs::ErrorCode SaveOptimization::EnsureCapacity(RE::SaveStorageWra
 
 void SaveOptimization::UnloadStringTable(RE::BSScript::ReadableStringTable* thiz)
 {
-    StringTableCacheLookup.clear();
-	StringTableCache.clear();
+    ResetCaches();
     StringTableCacheLookup.reserve(thiz->entries->size() * 1.5);
 	StringTableCache.reserve(thiz->entries->size() * 1.5);
 
     for (auto&& it : *thiz->entries) {
         RE::BSFixedString str = std::move(it.convertedString);
-        if (str.empty()) 
-            if(it.originalData != nullptr) str = it.originalData;
-            else continue;
+        if (str.empty())
+            //if(it.originalData != nullptr) str = it.originalData;
+            //else continue;
+            continue;
         
         StringTableCacheLookup.emplace(str.data(), StringTableCache.size());
         StringTableCache.push_back(std::move(str));
