@@ -16,12 +16,17 @@ protected:
 	static bool StringTableSaveGame(RE::BSScript::WritableStringTable* thiz, RE::SaveStorageWrapper* save);
 	static bool WriteString(RE::BSScript::WritableStringTable* thiz,RE::SaveStorageWrapper* save,RE::detail::BSFixedString<char>* scriptName);
 
+	static unsigned int InsertFormID(RE::BGSSaveLoadFormIDMap* a1, RE::FormID formID_1);
+
 	static inline REL::Relocation<decltype(SaveVM)> _SaveVM;
 	static inline REL::Relocation<decltype(SaveGame)> _SaveGame;
 	static inline REL::Relocation<decltype(EnsureCapacity)> _EnsureCapacity;
 
 	static inline REL::Relocation<decltype(UnloadStringTable)> _UnloadStringTable;
 	static inline REL::Relocation<decltype(ResetState)> _ResetState;
+
+	static inline REL::Relocation<decltype(InsertFormID)> _InsertFormID;
+
 	//static inline REL::Relocation<decltype(StringTableSaveGame)> _StringTableSaveGame;
 	//static inline REL::Relocation<decltype(WriteString)> _WriteString;
 

@@ -70,6 +70,11 @@ void SaveOptimization::Install()
         //Put off lifting typetable first, focus on stringtable caching
     }
 
+    {// Fix a race condition crash
+		REL::Relocation<LPVOID>insertformid{ RELOCATION_ID(34634, 35554) };
+        MH_CreateHook(insertformid.get(), InsertFormID, (LPVOID*)&_InsertFormID);
+    }
+
     SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
         if (msg->type == SKSE::MessagingInterface::kNewGame) {
             ResetCaches();
@@ -213,6 +218,20 @@ bool SaveOptimization::WriteString(RE::BSScript::WritableStringTable* thiz, RE::
 		const uint16_t id = static_cast<uint16_t>(it.first->second);
         return save->Write(2, reinterpret_cast<const std::byte*>(&id)) == (RE::BSStorageDefs::ErrorCode)0;
     }
+}
+
+inline std::atomic_flag formIDLock = ATOMIC_FLAG_INIT;
+
+unsigned int SaveOptimization::InsertFormID(RE::BGSSaveLoadFormIDMap* thiz, RE::FormID formID)
+{
+    while (formIDLock.test_and_set(std::memory_order_acquire)) {
+        _mm_pause();
+    }
+
+    uint32_t result = _InsertFormID(thiz, formID);
+
+    formIDLock.clear(std::memory_order_release);
+    return result;
 }
 
 //bool SaveOptimization::LoadTypeTable(RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>* thiz, RE::LoadStorageWrapper* loader, RE::BSScript::IVMSaveLoadInterface* intfc, RE::BSScript::Internal::VirtualMachine* vm)
