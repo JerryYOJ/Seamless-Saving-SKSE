@@ -56,7 +56,7 @@ void SaveOptimization::Install()
         REL::Relocation<LPVOID>savegame{ RELOCATION_ID(34676, 35599) };
         MH_CreateHook(savegame.get(), SaveGame, (LPVOID*)&_SaveGame);
 
-        REL::Relocation<LPVOID>ensurecap{ RELOCATION_ID(20154, 20154) }; //buffer growth
+        REL::Relocation<LPVOID>ensurecap{ RELOCATION_ID(19760, 20154) }; //buffer growth
         MH_CreateHook(ensurecap.get(), EnsureCapacity, (LPVOID*)&_EnsureCapacity);
     }
     
