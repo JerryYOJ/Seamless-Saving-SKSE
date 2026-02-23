@@ -125,7 +125,7 @@ void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fi
         vmSaveThreadID = GetCurrentThreadId();
 
         char svWrapperSpace[0x38]{};
-        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 15 * 1024 * 1024);
+        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 128 * 1024 * 1024);
 		auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
 
         _SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
@@ -194,7 +194,14 @@ void SaveOptimization::ResetState(RE::BSScript::Internal::VirtualMachine* thiz) 
 	thiz->unk94D0 = thiz->arrays.size(); //arrayCount
 
     if (!thiz->writeableTypeTable) {
-		thiz->writeableTypeTable = (RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)std::construct_at<RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>>((RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)RE::MemoryManager::GetSingleton()->GetThreadScrapHeap()->Allocate(0x38, 8));
+        auto&& scrapheap = RE::MemoryManager::GetSingleton()->GetThreadScrapHeap();
+        void* rawMem = scrapheap->Allocate(0x38, 8);
+        *(RE::ScrapHeap**)rawMem = scrapheap;
+
+        auto* table = (RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)((char*)rawMem + 0x8);
+        std::construct_at(table);
+
+        thiz->writeableTypeTable = (RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)table;
     }
     auto&& typeTable = (RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)thiz->writeableTypeTable;
 	typeTable->clear();
