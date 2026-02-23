@@ -18,7 +18,15 @@ static RE::SaveStorageWrapper* Ctor(void* svWrapperSpace, RE::Win32FileType* fil
     RE::MemoryManager::GetSingleton()->GetThreadScrapHeap()->Deallocate(((RE::WriteBuffer*)svWrapper->unk10)->startPtr);
 
     auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
-    writebuf->startPtr = malloc(size);
+
+	void* rawMem = malloc(size);
+    if(!rawMem) {
+        logger::critical("Failed to allocate memory for save buffer. Requested size: {} bytes", size);
+        *((volatile int*)0xDEAD0002) = 0; //Force a crash to avoid corrupting save data, should be visible in crash logs as well
+        return svWrapper;
+	}
+
+    writebuf->startPtr = rawMem;
     writebuf->size = size;
     writebuf->curPtr = writebuf->startPtr;
     svWrapper->unk18 = 1; //bWriteToBuffer
@@ -125,7 +133,7 @@ void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fi
         vmSaveThreadID = GetCurrentThreadId();
 
         char svWrapperSpace[0x38]{};
-        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 128 * 1024 * 1024);
+        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 64 * 1024 * 1024);
 		auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
 
         _SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
