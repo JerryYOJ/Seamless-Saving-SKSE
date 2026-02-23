@@ -18,7 +18,7 @@ static RE::SaveStorageWrapper* Ctor(void* svWrapperSpace, RE::Win32FileType* fil
     RE::MemoryManager::GetSingleton()->GetThreadScrapHeap()->Deallocate(((RE::WriteBuffer*)svWrapper->unk10)->startPtr);
 
     auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
-    writebuf->startPtr = RE::malloc(size);
+    writebuf->startPtr = malloc(size);
     writebuf->size = size;
     writebuf->curPtr = writebuf->startPtr;
     svWrapper->unk18 = 1; //bWriteToBuffer
@@ -37,6 +37,8 @@ static void Dtor(RE::SaveStorageWrapper* svWrapper) {
     Dtor(svWrapper);
 }
 
+DWORD vmSaveThreadID = 0;
+
 void SaveOptimization::Install()
 {
     {  //Multithrad VM Save
@@ -45,6 +47,9 @@ void SaveOptimization::Install()
 
         REL::Relocation<LPVOID>savegame{ RELOCATION_ID(34676, 35599) };
         MH_CreateHook(savegame.get(), SaveGame, (LPVOID*)&_SaveGame);
+
+        REL::Relocation<LPVOID>ensurecap{ RELOCATION_ID(20154, 20154) }; //buffer growth
+        MH_CreateHook(ensurecap.get(), EnsureCapacity, (LPVOID*)&_EnsureCapacity);
     }
     
     {   //Stringtable caching
@@ -66,7 +71,6 @@ void SaveOptimization::Install()
 		MH_CreateHook(writestr1.get(), WriteString, nullptr);
         MH_CreateHook(writestr2.get(), WriteString, nullptr);
         MH_CreateHook(writestr3.get(), WriteString, nullptr);
-
         //Put off lifting typetable first, focus on stringtable caching
     }
 
@@ -109,23 +113,19 @@ void SaveOptimization::SaveVM(RE::SkyrimVM* thiz, RE::SaveStorageWrapper* save) 
     save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
     save->unk18 = 1;
 
-    RE::free(writebuf.startPtr);
+    free(writebuf.startPtr);
     return;
 }
 
 void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fileStream) {
-    //static REL::Relocation<LPVOID>ensurecap{ RELOCATION_ID(20154, 20154) };
-    //static std::once_flag hkensure;
-    //std::call_once(hkensure, MH_CreateHook, ensurecap.get(), EnsureCapacity, (LPVOID*)&_EnsureCapacity);
-    
     auto promise = std::make_shared<std::promise<RE::WriteBuffer>>();
     vmSave = promise->get_future();
 
     std::thread([promise, fileStream] {
-        //MH_EnableHook(ensurecap.get());
-        
+        vmSaveThreadID = GetCurrentThreadId();
+
         char svWrapperSpace[0x38]{};
-        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 40 * 1024 * 1024);
+        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 15 * 1024 * 1024);
 		auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
 
         _SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
@@ -134,14 +134,40 @@ void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fi
 
         Dtor(svWrapper);
 
-        //MH_DisableHook(ensurecap.get());
+        vmSaveThreadID = 0;
     }).detach();
 
     return _SaveGame(thiz, fileStream);
 }
 
 RE::BSStorageDefs::ErrorCode SaveOptimization::EnsureCapacity(RE::SaveStorageWrapper* thiz, unsigned __int64 size) {
-    return _EnsureCapacity(thiz, size);
+    if(GetCurrentThreadId() != vmSaveThreadID) return _EnsureCapacity(thiz, size);
+    
+    auto&& writebuf = ((RE::WriteBuffer*)thiz->unk10);
+    size_t used = (uint64_t)writebuf->curPtr - (uint64_t)writebuf->startPtr;
+    size_t available = writebuf->size - used;
+
+    if (available < size) {
+        size_t newSize = writebuf->size;
+        while (newSize - used < size) {
+            newSize *= 2;
+        }
+
+        void* newBuf = malloc(newSize);
+        if (!newBuf) {
+			logger::critical("Failed to allocate memory for save buffer expansion. Requested size: {} bytes", newSize);
+			*((volatile int*)0xDEAD0001) = 0; //Force a crash to avoid corrupting save data, should be visible in crash logs as well
+            return (RE::BSStorageDefs::ErrorCode)1;
+        }
+
+        memcpy(newBuf, writebuf->startPtr, used);
+        free(writebuf->startPtr);
+
+        writebuf->startPtr = newBuf;
+        writebuf->curPtr = (char*)newBuf + used;
+        writebuf->size = newSize;
+    }
+	return (RE::BSStorageDefs::ErrorCode)0;
 }
 
 void SaveOptimization::UnloadStringTable(RE::BSScript::ReadableStringTable* thiz)
@@ -220,7 +246,7 @@ bool SaveOptimization::WriteString(RE::BSScript::WritableStringTable* thiz, RE::
     }
 }
 
-inline std::atomic_flag formIDLock = ATOMIC_FLAG_INIT;
+std::atomic_flag formIDLock = ATOMIC_FLAG_INIT;
 
 unsigned int SaveOptimization::InsertFormID(RE::BGSSaveLoadFormIDMap* thiz, RE::FormID formID)
 {
@@ -233,56 +259,3 @@ unsigned int SaveOptimization::InsertFormID(RE::BGSSaveLoadFormIDMap* thiz, RE::
     formIDLock.clear(std::memory_order_release);
     return result;
 }
-
-//bool SaveOptimization::LoadTypeTable(RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>* thiz, RE::LoadStorageWrapper* loader, RE::BSScript::IVMSaveLoadInterface* intfc, RE::BSScript::Internal::VirtualMachine* vm)
-//{
-//    bool ret = _LoadTypeTable(thiz, loader, intfc, vm);
-//
-//    if (ret) {
-//        auto&& stringtable = vm->readableStringTable;
-//        auto&& typetable = thiz;
-//
-//
-//
-//    }
-//
-//	return ret;
-//}
-
-//void SaveOptimization::AddString(RE::BSScript::WritableStringTable* thiz, RE::BSFixedString* str)
-//{
-//    
-//    if (!str || !str->data()) return;
-//    auto [it, inserted] = gTableCache.try_emplace((void*)str->data(), 0);
-//    if (!inserted) return;
-//    
-//    _AddString(thiz, str);
-//
-//    it->second = ((RE::BSScript::WritableStringArray*)thiz->unk00)->count - 1;
-//    logger::info("Table: {} : {}", str->data(), it->second);
-//    return;
-//}
-//bool SaveOptimization::WriteString(RE::BSScript::WritableStringTable* thiz, RE::SaveStorageWrapper* save, RE::BSFixedString* scriptName)
-//{
-//    if (!scriptName || !scriptName->data()) return false;
-//    
-//    uint32_t stringIdx = 0;
-//    
-//    auto [it, inserted] = gTableCache.try_emplace((void*)scriptName->data(), 0);
-//    if (inserted) {
-//        auto idx = thiz->referenceMap->find(*scriptName);
-//        if (idx == thiz->referenceMap->end()) return 0;
-//
-//        stringIdx = idx->second;
-//        it->second = stringIdx;
-//    }
-//    else {
-//        stringIdx = it->second;
-//    }
-//
-//    if (thiz->indexSize.underlying() == 1) return save->Write(4, reinterpret_cast<const std::byte*>(&stringIdx)) == (RE::BSStorageDefs::ErrorCode)0;
-//    else return save->Write(2, reinterpret_cast<const std::byte*>(&stringIdx)) == (RE::BSStorageDefs::ErrorCode)0;
-//}
-
-
-
