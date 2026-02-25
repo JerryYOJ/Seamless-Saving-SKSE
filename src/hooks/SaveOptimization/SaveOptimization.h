@@ -7,7 +7,7 @@ public:
 protected:
 	//static void AddString(RE::BSScript::WritableStringTable* thiz, RE::BSFixedString* str);
 	//static bool LoadTypeTable(RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>* thiz, RE::LoadStorageWrapper* loader, RE::BSScript::IVMSaveLoadInterface* intfc, RE::BSScript::Internal::VirtualMachine* vm);
-	static void SaveVM(RE::SkyrimVM* thiz, RE::SaveStorageWrapper* save);
+	static void SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::SkyrimScript::SaveFileHandleReaderWriter* writer, bool bForceResetState);
 	static void SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fileStream);
 	static RE::BSStorageDefs::ErrorCode EnsureCapacity(RE::SaveStorageWrapper* thiz, unsigned __int64 size);
 

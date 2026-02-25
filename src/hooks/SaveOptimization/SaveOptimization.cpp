@@ -50,8 +50,10 @@ DWORD vmSaveThreadID = 0;
 void SaveOptimization::Install()
 {
     {  //Multithrad VM Save
-        REL::Relocation<LPVOID>savevm{ RELOCATION_ID(34732, 35638), REL::VariantOffset(0x11A, 0x11A, 0) };
-        _SaveVM = SKSE::GetTrampoline().write_call<5>(savevm.address(), SaveVM);
+        //REL::Relocation<LPVOID>savevm{ RELOCATION_ID(34732, 35638), REL::VariantOffset(0x11A, 0x11A, 0) };
+        //_SaveVM = SKSE::GetTrampoline().write_call<5>(savevm.address(), SaveVM);
+		REL::Relocation<LPVOID>savevm{ RELOCATION_ID(98105, 104828) };
+		MH_CreateHook(savevm.get(), SaveVM, (LPVOID*)&_SaveVM); 
 
         REL::Relocation<LPVOID>savegame{ RELOCATION_ID(34676, 35599) };
         MH_CreateHook(savegame.get(), SaveGame, (LPVOID*)&_SaveGame);
@@ -102,41 +104,54 @@ void SaveOptimization::ResetCaches()
 	StringTableCacheLookup.emplace("", 0);
 }
 
-void SaveOptimization::SaveVM(RE::SkyrimVM* thiz, RE::SaveStorageWrapper* save) {
-    auto&& writebuf = vmSave.get();
-
-    save->unk18 = 0; //bWriteToBuffer
-	save->Write(2, (std::byte*)writebuf.startPtr); //Version NUM
+void SaveOptimization::SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::SkyrimScript::SaveFileHandleReaderWriter* writer, bool bForceResetState) {
     
-    //Saving Stringtable
-	auto&& table = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-    uint32_t count = StringTableCache.size();
-	save->Write(4, (std::byte*)&count);
-	for (auto&& str : StringTableCache) {
-        uint16_t len = str.length();
-		save->Write(2, (std::byte*)&len);
-        if (len > 0) save->Write(len, (std::byte*)str.data());
-    }
-    //Rest of Data
-    save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
-    save->unk18 = 1;
+    try {
+        auto&& writebuf = vmSave.get();
 
-    free(writebuf.startPtr);
-    return;
+        save->unk18 = 0; //bWriteToBuffer
+        save->Write(2, (std::byte*)writebuf.startPtr); //Version NUM
+
+        //Saving Stringtable
+        uint32_t count = StringTableCache.size();
+        save->Write(4, (std::byte*)&count);
+        for (auto&& str : StringTableCache) {
+            uint16_t len = str.length();
+            save->Write(2, (std::byte*)&len);
+            if (len > 0) save->Write(len, (std::byte*)str.data());
+        }
+        //Rest of Data
+        save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
+        save->unk18 = 1;
+
+        free(writebuf.startPtr);
+        return;
+    }
+    catch (...) {
+		return _SaveVM(thiz, save, writer, bForceResetState);
+    }
 }
 
 void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fileStream) {
     auto promise = std::make_shared<std::promise<RE::WriteBuffer>>();
     vmSave = promise->get_future();
 
-    std::thread([promise, fileStream] {
+    //thiz->formIDMap.unk00.reserve()
+
+    std::thread([promise] {
         vmSaveThreadID = GetCurrentThreadId();
 
         char svWrapperSpace[0x38]{};
-        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, fileStream, 64 * 1024 * 1024);
+        char fileStrSpace[0xBE8]{};
+        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, (RE::Win32FileType*)&fileStrSpace, 64 * 1024 * 1024);
 		auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
 
-        _SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
+        auto writer = RE::VTABLE_SkyrimScript__SaveFileHandleReaderWriter[0].address();
+
+		auto&& vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+
+        _SaveVM(((char*)vm + 0x18), svWrapper, (RE::SkyrimScript::SaveFileHandleReaderWriter*) & writer, false);
+        //_SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
 
         promise->set_value({writebuf->size, writebuf->startPtr, writebuf->curPtr});
 
