@@ -110,6 +110,23 @@ void SaveOptimization::SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::Skyr
 
     auto&& writebuf = vmSave.get();
 
+  //  { //Field Testing
+  //      char svWrapperSpace[0x38]{};
+  //      char fileStrSpace[0xBE8]{};
+  //      RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, (RE::Win32FileType*)&fileStrSpace, 64 * 1024 * 1024);
+  //      auto&& buf = ((RE::WriteBuffer*)svWrapper->unk10);
+
+  //      _SaveVM(thiz, svWrapper, writer, bForceResetState);
+
+  //      std::ofstream multi("multi.seamlesssaving"), orig("orig.seamlesssaving");
+		//multi.write((char*)writebuf.startPtr, (std::streamsize)writebuf.size);
+		//orig.write((char*)buf->startPtr, (std::streamsize)buf->size);
+
+  //      auto ptr = buf->startPtr;
+  //      Dtor(svWrapper);
+  //      free(ptr);
+  //  }
+
     save->unk18 = 0; //bWriteToBuffer
     save->Write(2, (std::byte*)writebuf.startPtr); //Version NUM
 
