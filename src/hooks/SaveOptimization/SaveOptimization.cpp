@@ -106,30 +106,27 @@ void SaveOptimization::ResetCaches()
 
 void SaveOptimization::SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::SkyrimScript::SaveFileHandleReaderWriter* writer, bool bForceResetState) {
     
-    try {
-        auto&& writebuf = vmSave.get();
+    if (!vmSave.valid()) return _SaveVM(thiz, save, writer, bForceResetState); //if not populated just use original
 
-        save->unk18 = 0; //bWriteToBuffer
-        save->Write(2, (std::byte*)writebuf.startPtr); //Version NUM
+    auto&& writebuf = vmSave.get();
 
-        //Saving Stringtable
-        uint32_t count = StringTableCache.size();
-        save->Write(4, (std::byte*)&count);
-        for (auto&& str : StringTableCache) {
-            uint16_t len = str.length();
-            save->Write(2, (std::byte*)&len);
-            if (len > 0) save->Write(len, (std::byte*)str.data());
-        }
-        //Rest of Data
-        save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
-        save->unk18 = 1;
+    save->unk18 = 0; //bWriteToBuffer
+    save->Write(2, (std::byte*)writebuf.startPtr); //Version NUM
 
-        free(writebuf.startPtr);
-        return;
+    //Saving Stringtable
+    uint32_t count = StringTableCache.size();
+    save->Write(4, (std::byte*)&count);
+    for (auto&& str : StringTableCache) {
+        uint16_t len = str.length();
+        save->Write(2, (std::byte*)&len);
+        if (len > 0) save->Write(len, (std::byte*)str.data());
     }
-    catch (...) {
-		return _SaveVM(thiz, save, writer, bForceResetState);
-    }
+    //Rest of Data
+    save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
+    save->unk18 = 1;
+
+    free(writebuf.startPtr);
+    return;
 }
 
 void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fileStream) {
