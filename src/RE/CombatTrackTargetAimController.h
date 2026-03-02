@@ -1,4 +1,5 @@
-namespace RE {
+namespace RE
+{
 	class CombatAimController;
 	class MagicCaster;
 

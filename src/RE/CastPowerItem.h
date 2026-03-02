@@ -66,9 +66,9 @@ namespace RE
 		constexpr iterator<const CastPowerItem> cend() const noexcept { return this->end(); }
 
 		// Member variables
-		SpellItem* power;    // 0
-		float          cooldown; // 8
-		CastPowerItem* next;     // 10
+		SpellItem*     power;     // 0
+		float          cooldown;  // 8
+		CastPowerItem* next;      // 10
 	};
 	static_assert(offsetof(CastPowerItem, power) == 0x0);
 	static_assert(offsetof(CastPowerItem, cooldown) == 0x8);

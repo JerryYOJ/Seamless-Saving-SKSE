@@ -26,7 +26,7 @@ add_rules("plugin.vsxmake.autoupdate")
 
 -- add packages
 add_requires("minhook")
-add_requires("boost", {configs = {filesystem = false}})
+add_requires("boost", { configs = { filesystem = false } })
 
 -- targets
 target("SeamlessSaving")
@@ -41,7 +41,7 @@ add_defines("UNICODE", "_UNICODE")
 set_basename("seamless-saving")
 
 -- generate PDB (releasedbg handles /Zi; /DEBUG tells linker to emit PDB for the DLL)
-add_shflags("/DEBUG", {force = true})
+add_shflags("/DEBUG", { force = true })
 
 -- version config vars
 set_configvar("VERSION_MAJOR", tonumber(ver[1]))

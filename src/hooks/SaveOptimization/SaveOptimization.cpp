@@ -8,316 +8,326 @@
 
 std::future<RE::WriteBuffer> vmSave;
 
-std::vector<RE::BSFixedString> StringTableCache;
+std::vector<RE::BSFixedString>                   StringTableCache;
 boost::unordered_flat_map<const char*, uint32_t> StringTableCacheLookup;
 
-static RE::SaveStorageWrapper* Ctor(void* svWrapperSpace, RE::Win32FileType* fileStream, uint64_t size) {
-    static REL::Relocation<void(*)(void* thiz, RE::Win32FileType* file)>Ctor{ RELOCATION_ID(35172, 36062) };
-    Ctor(svWrapperSpace, fileStream);
-    RE::SaveStorageWrapper* svWrapper = (RE::SaveStorageWrapper*)svWrapperSpace;
-    RE::MemoryManager::GetSingleton()->GetThreadScrapHeap()->Deallocate(((RE::WriteBuffer*)svWrapper->unk10)->startPtr);
+static RE::SaveStorageWrapper* Ctor(void* svWrapperSpace, RE::Win32FileType* fileStream, uint64_t size)
+{
+	static REL::Relocation<void (*)(void* thiz, RE::Win32FileType* file)> Ctor{ RELOCATION_ID(35172, 36062) };
+	Ctor(svWrapperSpace, fileStream);
+	RE::SaveStorageWrapper* svWrapper = (RE::SaveStorageWrapper*)svWrapperSpace;
+	RE::MemoryManager::GetSingleton()->GetThreadScrapHeap()->Deallocate(((RE::WriteBuffer*)svWrapper->unk10)->startPtr);
 
-    auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
+	auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
 
 	void* rawMem = malloc(size);
-    if(!rawMem) {
-        logger::critical("Failed to allocate memory for save buffer. Requested size: {} bytes", size);
-        *((volatile int*)0xDEAD0002) = 0; //Force a crash to avoid corrupting save data, should be visible in crash logs as well
-        return svWrapper;
+	if (!rawMem) {
+		logger::critical("Failed to allocate memory for save buffer. Requested size: {} bytes", size);
+		*((volatile int*)0xDEAD0002) = 0;  //Force a crash to avoid corrupting save data, should be visible in crash logs as well
+		return svWrapper;
 	}
 
-    writebuf->startPtr = rawMem;
-    writebuf->size = size;
-    writebuf->curPtr = writebuf->startPtr;
-    svWrapper->unk18 = 1; //bWriteToBuffer
+	writebuf->startPtr = rawMem;
+	writebuf->size = size;
+	writebuf->curPtr = writebuf->startPtr;
+	svWrapper->unk18 = 1;  //bWriteToBuffer
 
-    return svWrapper;
+	return svWrapper;
 }
 
 //MUST SAVE STARTPTR AND FREE THEN ELSEWHERE
-static void Dtor(RE::SaveStorageWrapper* svWrapper) {
-    auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
-    writebuf->startPtr = nullptr;
-    writebuf->size = 0;
-    writebuf->curPtr = nullptr;
-    
-    static REL::Relocation<void(*)(RE::SaveStorageWrapper*)>Dtor{ RELOCATION_ID(35173, 36063) };
-    Dtor(svWrapper);
+static void Dtor(RE::SaveStorageWrapper* svWrapper)
+{
+	auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
+	writebuf->startPtr = nullptr;
+	writebuf->size = 0;
+	writebuf->curPtr = nullptr;
+
+	static REL::Relocation<void (*)(RE::SaveStorageWrapper*)> Dtor{ RELOCATION_ID(35173, 36063) };
+	Dtor(svWrapper);
 }
 
 DWORD vmSaveThreadID = 0;
 
 void SaveOptimization::Install()
 {
-    {  // slow saving for manual saves for safety
-		REL::Relocation<LPVOID>save{ REL::RelocationID(34818, 35727) };
+	{  // slow saving for manual saves for safety
+		REL::Relocation<LPVOID> save{ REL::RelocationID(34818, 35727) };
 		MH_CreateHook(save.get(), Save, (LPVOID*)&_Save);
-    }
-    
-    
-    {  //Multithrad VM Save
-        //REL::Relocation<LPVOID>savevm{ RELOCATION_ID(34732, 35638), REL::VariantOffset(0x11A, 0x11A, 0) };
-        //_SaveVM = SKSE::GetTrampoline().write_call<5>(savevm.address(), SaveVM);
-		REL::Relocation<LPVOID>savevm{ RELOCATION_ID(98105, 104828) };
-		MH_CreateHook(savevm.get(), SaveVM, (LPVOID*)&_SaveVM); 
+	}
 
-        REL::Relocation<LPVOID>savegame{ RELOCATION_ID(34676, 35599) };
-        MH_CreateHook(savegame.get(), SaveGame, (LPVOID*)&_SaveGame);
+	{  //Multithrad VM Save
+		//REL::Relocation<LPVOID>savevm{ RELOCATION_ID(34732, 35638), REL::VariantOffset(0x11A, 0x11A, 0) };
+		//_SaveVM = SKSE::GetTrampoline().write_call<5>(savevm.address(), SaveVM);
+		REL::Relocation<LPVOID> savevm{ RELOCATION_ID(98105, 104828) };
+		MH_CreateHook(savevm.get(), SaveVM, (LPVOID*)&_SaveVM);
 
-        REL::Relocation<LPVOID>ensurecap{ RELOCATION_ID(19760, 20154) }; //buffer growth
-        MH_CreateHook(ensurecap.get(), EnsureCapacity, (LPVOID*)&_EnsureCapacity);
-    }
-    
-    {   //Stringtable caching
-	    REL::Relocation<LPVOID>dtorstrtable{ RELOCATION_ID(98106, 104829), REL::VariantOffset(0xAF2, 0xAE8, 0)};
+		REL::Relocation<LPVOID> savegame{ RELOCATION_ID(34676, 35599) };
+		MH_CreateHook(savegame.get(), SaveGame, (LPVOID*)&_SaveGame);
+
+		REL::Relocation<LPVOID> ensurecap{ RELOCATION_ID(19760, 20154) };  //buffer growth
+		MH_CreateHook(ensurecap.get(), EnsureCapacity, (LPVOID*)&_EnsureCapacity);
+	}
+
+	{  //Stringtable caching
+		REL::Relocation<LPVOID> dtorstrtable{ RELOCATION_ID(98106, 104829), REL::VariantOffset(0xAF2, 0xAE8, 0) };
 		_UnloadStringTable = SKSE::GetTrampoline().write_call<5>(dtorstrtable.address(), UnloadStringTable);
-    
-        //Hook ResetState
-        REL::Relocation<LPVOID>resetstate{ RELOCATION_ID(98158, 104882) };
+
+		//Hook ResetState
+		REL::Relocation<LPVOID> resetstate{ RELOCATION_ID(98158, 104882) };
 		MH_CreateHook(resetstate.get(), ResetState, (LPVOID*)&_ResetState);
-        
-        //Hook WritableStringTable::SaveGame
-		REL::Relocation<LPVOID>strsavegame{ RELOCATION_ID(97947, 104679)};
+
+		//Hook WritableStringTable::SaveGame
+		REL::Relocation<LPVOID> strsavegame{ RELOCATION_ID(97947, 104679) };
 		MH_CreateHook(strsavegame.get(), StringTableSaveGame, nullptr);
-        
-        //Hook WriteStrings
-		REL::Relocation<LPVOID>writestr1{ RELOCATION_ID(97948, 104680) };
-		REL::Relocation<LPVOID>writestr2{ RELOCATION_ID(97949, 104681) };
-        REL::Relocation<LPVOID>writestr3{ RELOCATION_ID(97950, 104682) };
+
+		//Hook WriteStrings
+		REL::Relocation<LPVOID> writestr1{ RELOCATION_ID(97948, 104680) };
+		REL::Relocation<LPVOID> writestr2{ RELOCATION_ID(97949, 104681) };
+		REL::Relocation<LPVOID> writestr3{ RELOCATION_ID(97950, 104682) };
 		MH_CreateHook(writestr1.get(), WriteString, nullptr);
-        MH_CreateHook(writestr2.get(), WriteString, nullptr);
-        MH_CreateHook(writestr3.get(), WriteString, nullptr);
-        //Put off lifting typetable first, focus on stringtable caching
-    }
+		MH_CreateHook(writestr2.get(), WriteString, nullptr);
+		MH_CreateHook(writestr3.get(), WriteString, nullptr);
+		//Put off lifting typetable first, focus on stringtable caching
+	}
 
-    {// Fix a race condition crash
-		REL::Relocation<LPVOID>insertformid{ RELOCATION_ID(34634, 35554) };
-        MH_CreateHook(insertformid.get(), InsertFormID, (LPVOID*)&_InsertFormID);
-    }
+	{  // Fix a race condition crash
+		REL::Relocation<LPVOID> insertformid{ RELOCATION_ID(34634, 35554) };
+		MH_CreateHook(insertformid.get(), InsertFormID, (LPVOID*)&_InsertFormID);
+	}
 
-    SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
-        if (msg->type == SKSE::MessagingInterface::kNewGame) {
-            ResetCaches();
-        }
+	SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
+		if (msg->type == SKSE::MessagingInterface::kNewGame) {
+			ResetCaches();
+		}
 	});
 }
 
 void SaveOptimization::ResetCaches()
 {
-    StringTableCache.clear();
+	StringTableCache.clear();
 	StringTableCacheLookup.clear();
-	StringTableCache.push_back(""); //Empty string is always 0 in ida
+	StringTableCache.push_back("");  //Empty string is always 0 in ida
 	StringTableCacheLookup.emplace("", 0);
 }
 
-void SaveOptimization::SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::SkyrimScript::SaveFileHandleReaderWriter* writer, bool bForceResetState) {
-    
-    if (!vmSave.valid()) return _SaveVM(thiz, save, writer, bForceResetState); //if not populated just use original
+void SaveOptimization::SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::SkyrimScript::SaveFileHandleReaderWriter* writer, bool bForceResetState)
+{
+	if (!vmSave.valid())
+		return _SaveVM(thiz, save, writer, bForceResetState);  //if not populated just use original
 
-    auto&& writebuf = vmSave.get();
+	auto&& writebuf = vmSave.get();
 
-  //  { //Field Testing
-  //      char svWrapperSpace[0x38]{};
-  //      char fileStrSpace[0xBE8]{};
-  //      RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, (RE::Win32FileType*)&fileStrSpace, 64 * 1024 * 1024);
-  //      auto&& buf = ((RE::WriteBuffer*)svWrapper->unk10);
+	//  { //Field Testing
+	//      char svWrapperSpace[0x38]{};
+	//      char fileStrSpace[0xBE8]{};
+	//      RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, (RE::Win32FileType*)&fileStrSpace, 64 * 1024 * 1024);
+	//      auto&& buf = ((RE::WriteBuffer*)svWrapper->unk10);
 
-  //      _SaveVM(thiz, svWrapper, writer, bForceResetState);
+	//      _SaveVM(thiz, svWrapper, writer, bForceResetState);
 
-  //      std::ofstream multi("multi.seamlesssaving"), orig("orig.seamlesssaving");
-		//multi.write((char*)writebuf.startPtr, (std::streamsize)writebuf.size);
-		//orig.write((char*)buf->startPtr, (std::streamsize)buf->size);
+	//      std::ofstream multi("multi.seamlesssaving"), orig("orig.seamlesssaving");
+	//multi.write((char*)writebuf.startPtr, (std::streamsize)writebuf.size);
+	//orig.write((char*)buf->startPtr, (std::streamsize)buf->size);
 
-  //      auto ptr = buf->startPtr;
-  //      Dtor(svWrapper);
-  //      free(ptr);
-  //  }
+	//      auto ptr = buf->startPtr;
+	//      Dtor(svWrapper);
+	//      free(ptr);
+	//  }
 
-    save->unk18 = 0; //bWriteToBuffer
-    save->Write(2, (std::byte*)writebuf.startPtr); //Version NUM
+	save->unk18 = 0;                                //bWriteToBuffer
+	save->Write(2, (std::byte*)writebuf.startPtr);  //Version NUM
 
-    //Saving Stringtable
-    uint32_t count = StringTableCache.size();
-    save->Write(4, (std::byte*)&count);
-    for (auto&& str : StringTableCache) {
-        uint16_t len = str.length();
-        save->Write(2, (std::byte*)&len);
-        if (len > 0) save->Write(len, (std::byte*)str.data());
-    }
-    //Rest of Data
-    save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
-    save->unk18 = 1;
+	//Saving Stringtable
+	uint32_t count = StringTableCache.size();
+	save->Write(4, (std::byte*)&count);
+	for (auto&& str : StringTableCache) {
+		uint16_t len = str.length();
+		save->Write(2, (std::byte*)&len);
+		if (len > 0)
+			save->Write(len, (std::byte*)str.data());
+	}
+	//Rest of Data
+	save->Write((uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr - 2, (std::byte*)writebuf.startPtr + 2);
+	save->unk18 = 1;
 
-    free(writebuf.startPtr);
-    return;
+	free(writebuf.startPtr);
+	return;
 }
 
-void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fileStream) {
-    auto promise = std::make_shared<std::promise<RE::WriteBuffer>>();
-    vmSave = promise->get_future();
+void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fileStream)
+{
+	auto promise = std::make_shared<std::promise<RE::WriteBuffer>>();
+	vmSave = promise->get_future();
 
-    //thiz->formIDMap.unk00.reserve()
+	//thiz->formIDMap.unk00.reserve()
 
-    std::thread([promise] {
-        vmSaveThreadID = GetCurrentThreadId();
+	std::thread([promise] {
+		vmSaveThreadID = GetCurrentThreadId();
 
-        char svWrapperSpace[0x38]{};
-        char fileStrSpace[0xBE8]{};
-        RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, (RE::Win32FileType*)&fileStrSpace, 64 * 1024 * 1024);
-		auto&& writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
+		char                    svWrapperSpace[0x38]{};
+		char                    fileStrSpace[0xBE8]{};
+		RE::SaveStorageWrapper* svWrapper = Ctor(&svWrapperSpace, (RE::Win32FileType*)&fileStrSpace, 64 * 1024 * 1024);
+		auto&&                  writebuf = ((RE::WriteBuffer*)svWrapper->unk10);
 
-        auto writer = RE::VTABLE_SkyrimScript__SaveFileHandleReaderWriter[0].address();
+		auto writer = RE::VTABLE_SkyrimScript__SaveFileHandleReaderWriter[0].address();
 
 		auto&& vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
 
-        _SaveVM(((char*)vm + 0x18), svWrapper, (RE::SkyrimScript::SaveFileHandleReaderWriter*) & writer, false);
-        //_SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
+		_SaveVM(((char*)vm + 0x18), svWrapper, (RE::SkyrimScript::SaveFileHandleReaderWriter*)&writer, false);
+		//_SaveVM(RE::SkyrimVM::GetSingleton(), svWrapper);
 
-        promise->set_value({writebuf->size, writebuf->startPtr, writebuf->curPtr});
+		promise->set_value({ writebuf->size, writebuf->startPtr, writebuf->curPtr });
 
-        Dtor(svWrapper);
+		Dtor(svWrapper);
 
-        vmSaveThreadID = 0;
-    }).detach();
+		vmSaveThreadID = 0;
+	}).detach();
 
-    return _SaveGame(thiz, fileStream);
+	return _SaveGame(thiz, fileStream);
 }
 
-RE::BSStorageDefs::ErrorCode SaveOptimization::EnsureCapacity(RE::SaveStorageWrapper* thiz, unsigned __int64 size) {
-    if(GetCurrentThreadId() != vmSaveThreadID) return _EnsureCapacity(thiz, size);
-    
-    auto&& writebuf = ((RE::WriteBuffer*)thiz->unk10);
-    size_t used = (uint64_t)writebuf->curPtr - (uint64_t)writebuf->startPtr;
-    size_t available = writebuf->size - used;
+RE::BSStorageDefs::ErrorCode SaveOptimization::EnsureCapacity(RE::SaveStorageWrapper* thiz, unsigned __int64 size)
+{
+	if (GetCurrentThreadId() != vmSaveThreadID)
+		return _EnsureCapacity(thiz, size);
 
-    if (available < size) {
-        size_t newSize = writebuf->size;
-        while (newSize - used < size) {
-            newSize *= 2;
-        }
+	auto&& writebuf = ((RE::WriteBuffer*)thiz->unk10);
+	size_t used = (uint64_t)writebuf->curPtr - (uint64_t)writebuf->startPtr;
+	size_t available = writebuf->size - used;
 
-        void* newBuf = malloc(newSize);
-        if (!newBuf) {
+	if (available < size) {
+		size_t newSize = writebuf->size;
+		while (newSize - used < size) {
+			newSize *= 2;
+		}
+
+		void* newBuf = malloc(newSize);
+		if (!newBuf) {
 			logger::critical("Failed to allocate memory for save buffer expansion. Requested size: {} bytes", newSize);
-			*((volatile int*)0xDEAD0001) = 0; //Force a crash to avoid corrupting save data, should be visible in crash logs as well
-            return (RE::BSStorageDefs::ErrorCode)1;
-        }
+			*((volatile int*)0xDEAD0001) = 0;  //Force a crash to avoid corrupting save data, should be visible in crash logs as well
+			return (RE::BSStorageDefs::ErrorCode)1;
+		}
 
-        memcpy(newBuf, writebuf->startPtr, used);
-        free(writebuf->startPtr);
+		memcpy(newBuf, writebuf->startPtr, used);
+		free(writebuf->startPtr);
 
-        writebuf->startPtr = newBuf;
-        writebuf->curPtr = (char*)newBuf + used;
-        writebuf->size = newSize;
-    }
+		writebuf->startPtr = newBuf;
+		writebuf->curPtr = (char*)newBuf + used;
+		writebuf->size = newSize;
+	}
 	return (RE::BSStorageDefs::ErrorCode)0;
 }
 
 void SaveOptimization::UnloadStringTable(RE::BSScript::ReadableStringTable* thiz)
 {
-    ResetCaches();
-    StringTableCacheLookup.reserve(thiz->entries->size() * 1.5);
+	ResetCaches();
+	StringTableCacheLookup.reserve(thiz->entries->size() * 1.5);
 	StringTableCache.reserve(thiz->entries->size() * 1.5);
 
-    for (auto&& it : *thiz->entries) {
-        RE::BSFixedString str = std::move(it.convertedString);
-        if (str.empty())
-            //if(it.originalData != nullptr) str = it.originalData;
-            //else continue;
-            continue;
-        
-        StringTableCacheLookup.emplace(str.data(), StringTableCache.size());
-        StringTableCache.push_back(std::move(str));
-    }
-    
-    return _UnloadStringTable(thiz);
+	for (auto&& it : *thiz->entries) {
+		RE::BSFixedString str = std::move(it.convertedString);
+		if (str.empty())
+			//if(it.originalData != nullptr) str = it.originalData;
+			//else continue;
+			continue;
+
+		StringTableCacheLookup.emplace(str.data(), StringTableCache.size());
+		StringTableCache.push_back(std::move(str));
+	}
+
+	return _UnloadStringTable(thiz);
 }
 
-void SaveOptimization::ResetState(RE::BSScript::Internal::VirtualMachine* thiz) {
-	thiz->unk94D0 = thiz->arrays.size(); //arrayCount
+void SaveOptimization::ResetState(RE::BSScript::Internal::VirtualMachine* thiz)
+{
+	thiz->unk94D0 = thiz->arrays.size();  //arrayCount
 
-    if (!thiz->writeableTypeTable) {
-        auto&& scrapheap = RE::MemoryManager::GetSingleton()->GetThreadScrapHeap();
-        void* rawMem = scrapheap->Allocate(0x38, 8);
-        *(RE::ScrapHeap**)rawMem = scrapheap;
+	if (!thiz->writeableTypeTable) {
+		auto&& scrapheap = RE::MemoryManager::GetSingleton()->GetThreadScrapHeap();
+		void*  rawMem = scrapheap->Allocate(0x38, 8);
+		*(RE::ScrapHeap**)rawMem = scrapheap;
 
-        auto* table = (RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)((char*)rawMem + 0x8);
-        std::construct_at(table);
+		auto* table = (RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)((char*)rawMem + 0x8);
+		std::construct_at(table);
 
-        thiz->writeableTypeTable = (RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)table;
-    }
-    auto&& typeTable = (RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)thiz->writeableTypeTable;
+		thiz->writeableTypeTable = (RE::BSTHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)table;
+	}
+	auto&& typeTable = (RE::BSTScrapHashMap<RE::BSFixedString, RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo>>*)thiz->writeableTypeTable;
 	typeTable->clear();
 	typeTable->reserve(thiz->objectTypeMap.size());
-    thiz->unk94CC = 0; //scriptCount
-    for (auto&& obj : thiz->attachedScripts) {
-        for (auto&& script : obj.second) {
-            auto typeInfo = script->type;
-            while (typeInfo != nullptr) {
-                auto&& ins = typeTable->insert({ typeInfo->name, typeInfo });
-				if (ins.second == false) break;
-                typeInfo = typeInfo->parentTypeInfo;
-            }
-			thiz->unk94CC++; //scriptCount
-        }
-    }
-    for (auto&& obj : thiz->objectsAwaitingCleanup) {
-        auto typeInfo = obj->type;
-        while (typeInfo != nullptr) {
+	thiz->unk94CC = 0;  //scriptCount
+	for (auto&& obj : thiz->attachedScripts) {
+		for (auto&& script : obj.second) {
+			auto typeInfo = script->type;
+			while (typeInfo != nullptr) {
+				auto&& ins = typeTable->insert({ typeInfo->name, typeInfo });
+				if (ins.second == false)
+					break;
+				typeInfo = typeInfo->parentTypeInfo;
+			}
+			thiz->unk94CC++;  //scriptCount
+		}
+	}
+	for (auto&& obj : thiz->objectsAwaitingCleanup) {
+		auto typeInfo = obj->type;
+		while (typeInfo != nullptr) {
 			auto&& ins = typeTable->insert({ typeInfo->name, typeInfo });
-            if (ins.second == false) break;
+			if (ins.second == false)
+				break;
 			typeInfo = typeInfo->parentTypeInfo;
-        }
-    }
-    
-    return;
+		}
+	}
+
+	return;
 }
 
 bool SaveOptimization::StringTableSaveGame(RE::BSScript::WritableStringTable* thiz, RE::SaveStorageWrapper* save)
 {
-    return true;
+	return true;
 }
 
 bool SaveOptimization::WriteString(RE::BSScript::WritableStringTable* thiz, RE::SaveStorageWrapper* save, RE::detail::BSFixedString<char>* scriptName)
 {
-	if (!scriptName || !scriptName->data()) return false;
-    
-    auto&& it = StringTableCacheLookup.try_emplace(scriptName->data(), StringTableCache.size());
-    if (it.second) {
-        StringTableCache.push_back(*scriptName);
+	if (!scriptName || !scriptName->data())
+		return false;
+
+	auto&& it = StringTableCacheLookup.try_emplace(scriptName->data(), StringTableCache.size());
+	if (it.second) {
+		StringTableCache.push_back(*scriptName);
 		//logger::info("Cache Miss: {} : {}", scriptName->data(), it.first->second);
-    }
+	}
 	//else logger::info("Cache Hit: {} : {}", scriptName->data(), it.first->second);
 
-	if (thiz->indexSize.underlying() == 1) return save->Write(4, reinterpret_cast<const std::byte*>(&it.first->second)) == (RE::BSStorageDefs::ErrorCode)0;
-    else {
+	if (thiz->indexSize.underlying() == 1)
+		return save->Write(4, reinterpret_cast<const std::byte*>(&it.first->second)) == (RE::BSStorageDefs::ErrorCode)0;
+	else {
 		const uint16_t id = static_cast<uint16_t>(it.first->second);
-        return save->Write(2, reinterpret_cast<const std::byte*>(&id)) == (RE::BSStorageDefs::ErrorCode)0;
-    }
+		return save->Write(2, reinterpret_cast<const std::byte*>(&id)) == (RE::BSStorageDefs::ErrorCode)0;
+	}
 }
 
 std::atomic_flag formIDLock = ATOMIC_FLAG_INIT;
 
 unsigned int SaveOptimization::InsertFormID(RE::BGSSaveLoadFormIDMap* thiz, RE::FormID formID)
 {
-    while (formIDLock.test_and_set(std::memory_order_acquire)) {
-        _mm_pause();
-    }
+	while (formIDLock.test_and_set(std::memory_order_acquire)) {
+		_mm_pause();
+	}
 
-    uint32_t result = _InsertFormID(thiz, formID);
+	uint32_t result = _InsertFormID(thiz, formID);
 
-    formIDLock.clear(std::memory_order_release);
-    return result;
+	formIDLock.clear(std::memory_order_release);
+	return result;
 }
 
 void SaveOptimization::Save(RE::BGSSaveLoadManager* thiz, unsigned int type, unsigned int a3, char* a4)
 {
-    if (type == 2) { //Manual Save
+	if (type == 2) {  //Manual Save
 		MH_DisableHook(MH_ALL_HOOKS);
-        _Save(thiz, type, a3, a4);
-        MH_EnableHook(MH_ALL_HOOKS);
-        return;
-    }
-    return _Save(thiz, type, a3, a4);
+		_Save(thiz, type, a3, a4);
+		MH_EnableHook(MH_ALL_HOOKS);
+		return;
+	}
+	return _Save(thiz, type, a3, a4);
 }
-

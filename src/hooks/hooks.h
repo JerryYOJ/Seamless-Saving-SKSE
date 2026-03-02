@@ -2,13 +2,15 @@
 
 #include "SaveOptimization/SaveOptimization.h"
 
-namespace Hooks {
-    void Install() { 
-        MH_Initialize();
+namespace Hooks
+{
+	void Install()
+	{
+		MH_Initialize();
 
-        SaveOptimization::Install();
+		SaveOptimization::Install();
 
-        MH_EnableHook(MH_ALL_HOOKS);
-        return;
-    }
+		MH_EnableHook(MH_ALL_HOOKS);
+		return;
+	}
 }

@@ -2,7 +2,8 @@
 
 #include "CombatTrackTargetAimController.h"
 
-namespace RE {
+namespace RE
+{
 	class CombatMeleeAimController : public CombatTrackTargetAimController
 	{
 	public:

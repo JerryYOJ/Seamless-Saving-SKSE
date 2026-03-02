@@ -10,7 +10,6 @@ namespace RE
 	class CombatBehaviorContext
 	{
 	public:
-
 		void Enter() {}
 		void Exit() {}
 	};

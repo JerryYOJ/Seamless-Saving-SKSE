@@ -1,4 +1,5 @@
-namespace RE {
+namespace RE
+{
 	class CombatController;
 	class MagicCaster;
 
@@ -42,17 +43,16 @@ namespace RE {
 		virtual CombatAimController* Clone() const;                                       // 09
 		virtual void                 FinishLoadGame();                                    // 0A
 
-
 		// members
-		MagicCaster* mcaster;         // 10 -- or weap?
-		NiPoint3          targetLoc;       // 18
-		uint32_t          field_24;        // 24
-		CombatController* combat_control;  // 28
-		ActorHandle       target;          // 30
-		PRIORITY          previousPriority;// 34
-		PRIORITY          currentPriority; // 38
-		FLAGS             flags;           // 3C
-		AITimer           timer;           // 40
+		MagicCaster*      mcaster;           // 10 -- or weap?
+		NiPoint3          targetLoc;         // 18
+		uint32_t          field_24;          // 24
+		CombatController* combat_control;    // 28
+		ActorHandle       target;            // 30
+		PRIORITY          previousPriority;  // 34
+		PRIORITY          currentPriority;   // 38
+		FLAGS             flags;             // 3C
+		AITimer           timer;             // 40
 	private:
 	};
 	static_assert(sizeof(CombatAimController) == 0x48);
