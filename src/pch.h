@@ -1,18 +1,26 @@
 #pragma once
 
-// This file is required.
+#define WIN32_LEAN_AND_MEAN  // Exclude rarely-used stuff from Windows headers
+#define NOMINMAX
 
-#include "RE/Skyrim.h"
-#include "SKSE/SKSE.h"
+#include <RE/Skyrim.h>
+#include <REX/REX.h>
+#include <SKSE/SKSE.h>
 
-using namespace std::literals;
+#include <Windows.h>
+#include <chrono>
+#include <future>
+#include <map>
+#include <vector>
+
 namespace logger = SKSE::log;
+using namespace std::literals;
 
 template <typename T>
 class SINGLETON {
 public:
     static T* getInstance() {
-        static T instance; // Create instance of T
+        static T instance;
         return std::addressof(instance);
     }
 
@@ -20,7 +28,6 @@ protected:
     SINGLETON() = default;
     ~SINGLETON() = default;
 
-    // Delete copy and move constructors and assignment operators
     SINGLETON(const SINGLETON&) = delete;
     SINGLETON(SINGLETON&&) = delete;
     SINGLETON& operator=(const SINGLETON&) = delete;
@@ -54,12 +61,12 @@ protected:
 };
 
 #ifdef SKYRIM_AE
-#	define OFFSET(se, ae) ae
-#	define OFFSET_3(se, ae, vr) ae
+#    define OFFSET(se, ae) ae
+#    define OFFSET_3(se, ae, vr) ae
 #elif SKYRIMVR
-#	define OFFSET(se, ae) se
-#	define OFFSET_3(se, ae, vr) vr
+#    define OFFSET(se, ae) se
+#    define OFFSET_3(se, ae, vr) vr
 #else
-#	define OFFSET(se, ae) se
-#	define OFFSET_3(se, ae, vr) se
+#    define OFFSET(se, ae) se
+#    define OFFSET_3(se, ae, vr) se
 #endif

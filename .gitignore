@@ -1,45 +1,16 @@
-# Prerequisites
-*.d
+# dot folders
+.cache/
+.idea/
+.vs/
+.vscode/
+.xmake/
+.DS_Store
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# folders
+build/
+vs*/
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# debug information files
-*.dwo
-
-.vs
-.vscode
-.buildenv/build
+# files
+*.zip
+compile_commands.json
+xmake-deps.lua
