@@ -9,6 +9,7 @@
 # folders
 build/
 vs*/
+.buildenv/build/
 
 # files
 *.zip

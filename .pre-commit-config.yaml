@@ -11,6 +11,7 @@ repos:
     rev: v21.1.8
     hooks:
       - id: clang-format
+        exclude: \.json$
 
   - repo: https://github.com/JohnnyMorganz/stylua
     rev: v2.3.1
@@ -23,3 +24,4 @@ repos:
     hooks:
       - id: prettier
         types_or: [yaml, markdown, json]
+        exclude: ^\.clang-format$

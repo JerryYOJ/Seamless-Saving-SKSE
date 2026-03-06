@@ -1,6 +1,7 @@
 # Seamless Saving - Skyrim Save Accelerator
 
 An SKSE plugin that eliminates save lag by heavily optimizing the Skyrim Script VM save process — reducing script VM save time by up to **~89%** and total save time by up to **~60%**.
+[Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/173161)
 
 ## The Problem
 
@@ -25,29 +26,63 @@ Install with a mod manager (MO2, Vortex, etc.) or manually copy the `.dll` and `
 
 ## Building from Source
 
-### Requirements
+Both xmake and cmake/vcpkg build systems are supported.
 
-- [xmake](https://xmake.io) 2.8.2+
+### Common requirements
+
 - Visual Studio 2022 with C++ workload (MSVC)
-
-### Steps
+- Git (for cloning and submodules)
 
 ```bash
 git clone https://github.com/JerryYOJ/Seamless-Saving-SKSE.git
 cd Seamless-Saving-SKSE
+```
+
+---
+
+### xmake
+
+**Additional requirements:** [xmake](https://xmake.io) 2.8.2+
+
+```bash
 git submodule update --init --recursive
 xmake
 ```
 
-xmake will download all required packages automatically and generate `xmake-requires.lock` on the first run.
+xmake downloads all required packages automatically and generates `xmake-requires.lock` on the first run.
 
-### Auto-deploy
+**Auto-deploy:** set one or more of these environment variables and the `.dll`/`.pdb` will be copied to `SKSE/Plugins/` after every build:
 
-Set the `SkyrimPluginTargets` environment variable to one or more target directories (semicolon-separated) and the built `.dll`/`.pdb` will be copied to `<dir>/SKSE/Plugins/` automatically after each build.
+| Variable              | Destination                                      |
+| --------------------- | ------------------------------------------------ |
+| `SkyrimPluginTargets` | `<dir>/SKSE/Plugins/` (semicolon-separated list) |
+| `SKYRIM_MODS_FOLDER`  | `<dir>/Seamless Saving/SKSE/Plugins/`            |
+| `SKYRIM_FOLDER`       | `<dir>/Data/SKSE/Plugins/`                       |
 
+---
+
+### cmake
+
+The CMake build now uses the copy of CommonLibSSE stored under `lib/commonlibsse-ng` (the submodule) instead of the version provided by
+vcpkg. You do **not** need to install the package in vcpkg, although
+vcpkg support is still recognised for other libraries if you have it set up.
+
+**Additional requirements:** [CMake](https://cmake.org) 3.21+ (vcpkg is
+optional and only used if `VCPKG_ROOT` is defined)
+
+```bash
+cmake --preset releasewithdeb -S .buildenv -B .buildenv/build/releasewithdeb
+cmake --build .buildenv/build/releasewithdeb
 ```
-SkyrimPluginTargets=C:\path\to\skyrim\Data;C:\path\to\MO2\mods\SeamlessSaving
-```
+
+Available presets: `debug`, `release`, `releasewithdeb`
+
+**Auto-deploy:** set one of these environment variables before configuring:
+
+| Variable             | Destination                          |
+| -------------------- | ------------------------------------ |
+| `SKYRIM_MODS_FOLDER` | `<dir>/SeamlessSaving/SKSE/Plugins/` |
+| `SKYRIM_FOLDER`      | `<dir>/Data/SKSE/Plugins/`           |
 
 ## License
 
