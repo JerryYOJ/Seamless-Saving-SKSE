@@ -57,29 +57,36 @@ void SaveOptimization::Install()
 	}
 
 	{  //Multithrad VM Save
+		logger::info("Installing save optimization hooks");
 		//REL::Relocation<LPVOID>savevm{ RELOCATION_ID(34732, 35638), REL::VariantOffset(0x11A, 0x11A, 0) };
 		//_SaveVM = SKSE::GetTrampoline().write_call<5>(savevm.address(), SaveVM);
 		REL::Relocation<LPVOID> savevm{ RELOCATION_ID(98105, 104828) };
 		MH_CreateHook(savevm.get(), SaveVM, (LPVOID*)&_SaveVM);
+		logger::debug("  SaveVM @ {:x}", savevm.address());
 
 		REL::Relocation<LPVOID> savegame{ RELOCATION_ID(34676, 35599) };
 		MH_CreateHook(savegame.get(), SaveGame, (LPVOID*)&_SaveGame);
+		logger::debug("  SaveGame @ {:x}", savegame.address());
 
 		REL::Relocation<LPVOID> ensurecap{ RELOCATION_ID(19760, 20154) };  //buffer growth
 		MH_CreateHook(ensurecap.get(), EnsureCapacity, (LPVOID*)&_EnsureCapacity);
+		logger::debug("  EnsureCapacity @ {:x}", ensurecap.address());
 	}
 
 	{  //Stringtable caching
 		REL::Relocation<LPVOID> dtorstrtable{ RELOCATION_ID(98106, 104829), REL::VariantOffset(0xAF2, 0xAE8, 0) };
 		_UnloadStringTable = SKSE::GetTrampoline().write_call<5>(dtorstrtable.address(), UnloadStringTable);
+		logger::debug("  UnloadStringTable @ {:x}", dtorstrtable.address());
 
 		//Hook ResetState
 		REL::Relocation<LPVOID> resetstate{ RELOCATION_ID(98158, 104882) };
 		MH_CreateHook(resetstate.get(), ResetState, (LPVOID*)&_ResetState);
+		logger::debug("  ResetState @ {:x}", resetstate.address());
 
 		//Hook WritableStringTable::SaveGame
 		REL::Relocation<LPVOID> strsavegame{ RELOCATION_ID(97947, 104679) };
 		MH_CreateHook(strsavegame.get(), StringTableSaveGame, nullptr);
+		logger::debug("  StringTableSaveGame @ {:x}", strsavegame.address());
 
 		//Hook WriteStrings
 		REL::Relocation<LPVOID> writestr1{ RELOCATION_ID(97948, 104680) };
@@ -89,11 +96,13 @@ void SaveOptimization::Install()
 		MH_CreateHook(writestr2.get(), WriteString, nullptr);
 		MH_CreateHook(writestr3.get(), WriteString, nullptr);
 		//Put off lifting typetable first, focus on stringtable caching
+		logger::debug("  WriteString hooks @ {:x}, {:x}, {:x}", writestr1.address(), writestr2.address(), writestr3.address());
 	}
 
 	{  // Fix a race condition crash
 		REL::Relocation<LPVOID> insertformid{ RELOCATION_ID(34634, 35554) };
 		MH_CreateHook(insertformid.get(), InsertFormID, (LPVOID*)&_InsertFormID);
+		logger::debug("  InsertFormID @ {:x}", insertformid.address());
 	}
 
 	SKSE::GetMessagingInterface()->RegisterListener([](SKSE::MessagingInterface::Message* msg) {
@@ -101,10 +110,12 @@ void SaveOptimization::Install()
 			ResetCaches();
 		}
 	});
+	logger::info("Save optimization hooks installed");
 }
 
 void SaveOptimization::ResetCaches()
 {
+	logger::debug("Resetting string table cache");
 	StringTableCache.clear();
 	StringTableCacheLookup.clear();
 	StringTableCache.push_back("");  //Empty string is always 0 in ida
@@ -113,10 +124,16 @@ void SaveOptimization::ResetCaches()
 
 void SaveOptimization::SaveVM(void* thiz, RE::SaveStorageWrapper* save, RE::SkyrimScript::SaveFileHandleReaderWriter* writer, bool bForceResetState)
 {
-	if (!vmSave.valid())
+	if (!vmSave.valid()) {
+		logger::debug("SaveVM: no async result pending, falling through to original");
 		return _SaveVM(thiz, save, writer, bForceResetState);  //if not populated just use original
+	}
 
+	auto   waitStart = std::chrono::steady_clock::now();
 	auto&& writebuf = vmSave.get();
+	auto   waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - waitStart).count();
+	auto   vmDataSize = (uint64_t)writebuf.curPtr - (uint64_t)writebuf.startPtr;
+	logger::info("Applying async VM save: {} bytes, waited {}ms for background thread", vmDataSize, waitMs);
 
 	//  { //Field Testing
 	//      char svWrapperSpace[0x38]{};
@@ -160,7 +177,7 @@ void SaveOptimization::SaveGame(RE::BGSSaveLoadGame* thiz, RE::Win32FileType* fi
 	auto promise = std::make_shared<std::promise<RE::WriteBuffer>>();
 	vmSave = promise->get_future();
 
-	//thiz->formIDMap.unk00.reserve()
+	logger::debug("Save triggered, dispatching async VM save");
 
 	std::thread([promise] {
 		vmSaveThreadID = GetCurrentThreadId();
@@ -201,6 +218,7 @@ RE::BSStorageDefs::ErrorCode SaveOptimization::EnsureCapacity(RE::SaveStorageWra
 		while (newSize - used < size) {
 			newSize *= 2;
 		}
+		logger::debug("Expanding VM save buffer: {} -> {} bytes", writebuf->size, newSize);
 
 		void* newBuf = malloc(newSize);
 		if (!newBuf) {
@@ -235,6 +253,7 @@ void SaveOptimization::UnloadStringTable(RE::BSScript::ReadableStringTable* thiz
 		StringTableCacheLookup.emplace(str.data(), StringTableCache.size());
 		StringTableCache.push_back(std::move(str));
 	}
+	logger::debug("String table cache built: {} entries", StringTableCache.size());
 
 	return _UnloadStringTable(thiz);
 }

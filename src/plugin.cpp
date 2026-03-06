@@ -21,9 +21,14 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 	SKSE::Init(skse);
 
 	InitializeLog();
+
+	auto* plugin = SKSE::PluginDeclaration::GetSingleton();
+	logger::info("{} {} loading", plugin->GetName(), plugin->GetVersion());
+
 	SKSE::AllocTrampoline(1 << 7);
 
 	Hooks::Install();
 
+	logger::info("{} loaded successfully", plugin->GetName());
 	return true;
 }
