@@ -49,7 +49,7 @@
                 commit = "b0b316eb13e79e5ea7e7a56b80117a3526dedeeb",
                 url = "https://gitlab.com/tboox/xmake-repo.git"
             },
-            version = "v1.12.1"
+            version = "1.13.0"
         },
         ["rapidcsv#31fecfc4"] = {
             repo = {

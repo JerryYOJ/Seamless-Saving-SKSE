@@ -8,7 +8,7 @@ includes("lib/commonlibsse-ng")
 set_project("SeamlessSaving")
 set_license("MIT")
 
-local version = "0.0.1"
+local version = "1.0.6"
 local ver = version:split("%.")
 set_version(version)
 
