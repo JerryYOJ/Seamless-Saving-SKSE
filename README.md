@@ -1,7 +1,9 @@
 # Seamless Saving - Skyrim Save Accelerator
 
 An SKSE plugin that eliminates save lag by heavily optimizing the Skyrim Script VM save process — reducing script VM save time by up to **~89%** and total save time by up to **~60%**.
-[Nexus](https://www.nexusmods.com/skyrimspecialedition/mods/173161)
+
+- [Nexus SSE/AE](https://www.nexusmods.com/skyrimspecialedition/mods/173161)
+- [VR](https://www.nexusmods.com/skyrimspecialedition/mods/174106)
 
 ## The Problem
 
