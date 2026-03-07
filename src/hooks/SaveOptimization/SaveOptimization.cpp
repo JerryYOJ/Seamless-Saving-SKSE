@@ -49,6 +49,12 @@ DWORD vmSaveThreadID = 0;
 
 void SaveOptimization::Install()
 {
+    {  // slow saving for manual saves for safety
+		REL::Relocation<LPVOID>save{ REL::RelocationID(34818, 35727) };
+		MH_CreateHook(save.get(), Save, (LPVOID*)&_Save);
+    }
+    
+    
     {  //Multithrad VM Save
         //REL::Relocation<LPVOID>savevm{ RELOCATION_ID(34732, 35638), REL::VariantOffset(0x11A, 0x11A, 0) };
         //_SaveVM = SKSE::GetTrampoline().write_call<5>(savevm.address(), SaveVM);
@@ -303,3 +309,15 @@ unsigned int SaveOptimization::InsertFormID(RE::BGSSaveLoadFormIDMap* thiz, RE::
     formIDLock.clear(std::memory_order_release);
     return result;
 }
+
+void SaveOptimization::Save(RE::BGSSaveLoadManager* thiz, unsigned int type, unsigned int a3, char* a4)
+{
+    if (type == 2) { //Manual Save
+		MH_DisableHook(MH_ALL_HOOKS);
+        _Save(thiz, type, a3, a4);
+        MH_EnableHook(MH_ALL_HOOKS);
+        return;
+    }
+    return _Save(thiz, type, a3, a4);
+}
+
